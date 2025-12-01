@@ -1,0 +1,30 @@
+[project]
+name = "edge-vision-language-model-server"
+version = "0.1.0"
+description = "Edge Vision-Language Model Server (FastAPI API + background workers)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2",
+    "redis",
+    "rq",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "httpx",
+    "ruff",
+    "mypy",
+]
+
+[tool.uv]
+python = "3.11"
+
+[tool.uv.scripts]
+dev = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+worker = "python -m app.worker"
+
+

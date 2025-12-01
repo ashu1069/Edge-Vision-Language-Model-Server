@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  # 1. The API Server
+  api:
+    build: .
+    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+      QUEUE_NAME: "default"
+    depends_on:
+      - redis
+
+  # 2. The Background Worker
+  worker:
+    build: .
+    command: ["uv", "run", "worker"]
+    environment:
+      REDIS_URL: "redis://redis:6379/0"
+      QUEUE_NAME: "default"
+    depends_on:
+      - redis
+
+  # 3. The Queue (Redis)
+  redis:
+    image: "redis:alpine"
