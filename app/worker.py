@@ -2,10 +2,13 @@ import redis
 import time
 import json
 
+from app.vision import VisionModel
+
 # Connect to the same Redis instance
 redis_client = redis.Redis(host='redis', port=6379, db=0)
-
-print("👷 Worker started. Waiting for jobs...")
+print("Worker initializing...")
+vision_engine = VisionModel()
+print("Worker ready for jobs!")
 
 while True:
     # 1. Block and wait for a job from the 'right' of the list
@@ -14,16 +17,31 @@ while True:
     
     job = json.loads(job_json)
     print(f"Processing job: {job['id']}")
+    start_time = time.time()
     
-    # 2. Simulate heavy AI workload (Phase 2 & 3 will replace this)
-    time.sleep(2) 
+    # RUN INFERENCE
+    try:
+        result_data = vision_engine.predict(
+            job['image'],
+            conf_threshold=0.5
+        )
+
+        # Add latency metrics
+        latency = round(time.time() - start_time, 4)
+        result_data["latency_seconds"] = latency
+
+        output = {
+            "status": "success",
+            "vision_result": result_data,
+            # Placeholder for Phase 3
+            "vlm_result": "VLM not connected yet"
+        }
+
+    except Exception as e:
+        print(f"Job failed: {e}")
+        output = {"status": "failed", "error": str(e)}
+
     
-    # 3. Save fake result
-    fake_output = {
-        "detected_objects": ["person", "helmet"],
-        "answer": "Yes, the person is wearing a helmet."
-    }
-    
-    # 4. Store result where API can find it (expire in 1 hour)
-    redis_client.setex(f"result:{job['id']}", 3600, json.dumps(fake_output))
-    print(f"Job {job['id']} completed.")
+    # Store result where API can find it (expire in 1 hour)
+    redis_client.setex(f"result:{job['id']}", 3600, json.dumps(output))
+    print(f"Job {job['id']} finished in {latency}s")

@@ -10,6 +10,8 @@ dependencies = [
     "pydantic>=2",
     "redis",
     "rq",
+    "ultralytics",
+    "opencv-python-headless",
 ]
 
 [project.optional-dependencies]
