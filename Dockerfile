@@ -1,32 +1,28 @@
-FROM python:3.11-slim AS base
+# Dockerfile
+FROM python:3.10-slim
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    UV_LINK_MODE=copy
-
+# 1. Install system dependencies
+# FIX: 'libgl1-mesa-glx' is removed. We use 'libgl1' and 'libglib2.0-0' instead.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    build-essential \
+    libgl1 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    ln -s /root/.local/bin/uv /usr/local/bin/uv
+# 2. Install uv (The blazing fast package manager)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
+# 3. Set up the application directory
 WORKDIR /app
 
-# Install dependencies with uv (no dev deps in container)
-COPY pyproject.toml ./pyproject.toml
-RUN uv sync --no-dev
+# 4. Copy ONLY the project definition first (Optimization for Caching)
+COPY pyproject.toml .
 
-# Copy application code
-COPY app ./app
-COPY README.md ./README.md
+# 5. Install dependencies using uv
+# --system installs into the container's global python environment
+RUN uv pip install --system .
 
-# Ensure the venv from uv is on PATH by default
-ENV PATH="/app/.venv/bin:${PATH}"
+# 6. Copy the rest of the code
+COPY . .
 
-# Default command (can be overridden by docker-compose)
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-
-
+# 7. Start the app
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

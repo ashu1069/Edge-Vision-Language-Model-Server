@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   # 1. The API Server
@@ -16,7 +15,8 @@ services:
   # 2. The Background Worker
   worker:
     build: .
-    command: ["uv", "run", "worker"]
+    # Run the worker directly with Python; avoid relying on uv scripts inside the container
+    command: ["python", "-m", "app.worker"]
     environment:
       REDIS_URL: "redis://redis:6379/0"
       QUEUE_NAME: "default"

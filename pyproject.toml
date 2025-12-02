@@ -1,32 +1,23 @@
+# pyproject.toml
 [project]
-name = "edge-vision-language-model-server"
+name = "edge-vlm-server"
 version = "0.1.0"
-description = "Edge Vision-Language Model Server (FastAPI API + background workers)"
+description = "High-performance Edge VLM Inference Server"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "fastapi",
-    "uvicorn[standard]",
-    "pydantic>=2",
-    "redis",
-    "rq",
-    "ultralytics",
-    "opencv-python-headless",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest",
-    "httpx",
-    "ruff",
-    "mypy",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.20.0",
+    "redis>=5.0.0",
+    "pydantic>=2.0.0",
+    "ultralytics>=8.0.0",
+    "opencv-python-headless>=4.8.0",
+    "numpy>=1.24.0",
+    "requests>=2.30.0",
 ]
 
 [tool.uv]
-python = "3.11"
-
-[tool.uv.scripts]
-dev = "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
-worker = "python -m app.worker"
-
-
+dev-dependencies = [
+    "pytest",
+    "httpx",
+]

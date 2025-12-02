@@ -23,7 +23,7 @@ while True:
     try:
         result_data = vision_engine.predict(
             job['image'],
-            conf_threshold=0.5
+            conf_threshold=0.5,
         )
 
         # Add latency metrics
@@ -34,14 +34,15 @@ while True:
             "status": "success",
             "vision_result": result_data,
             # Placeholder for Phase 3
-            "vlm_result": "VLM not connected yet"
+            "vlm_result": "VLM not connected yet",
         }
 
-    except Exception as e:
-        print(f"Job failed: {e}")
-        output = {"status": "failed", "error": str(e)}
+        # Store result where API can find it (expire in 1 hour)
+        redis_client.setex(f"result:{job['id']}", 3600, json.dumps(output))
+        print(f"Job {job['id']} finished in {latency}s")
 
-    
-    # Store result where API can find it (expire in 1 hour)
-    redis_client.setex(f"result:{job['id']}", 3600, json.dumps(output))
-    print(f"Job {job['id']} finished in {latency}s")
+    except Exception as e:
+        print(f"Job {job['id']} failed: {e}")
+        error_output = {"status": "failed", "error": str(e)}
+        # Store failure result so the API can return it
+        redis_client.setex(f"result:{job['id']}", 3600, json.dumps(error_output))
