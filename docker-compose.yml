@@ -1,3 +1,4 @@
+version: '3.8'
 
 services:
   # 1. The API Server
@@ -8,9 +9,26 @@ services:
       - "8000:8000"
     environment:
       REDIS_URL: "redis://redis:6379/0"
-      QUEUE_NAME: "default"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
+      QUEUE_NAME: "vlm_queue"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
 
   # 2. The Background Worker
   worker:
@@ -19,10 +37,45 @@ services:
     command: ["python", "-m", "app.worker"]
     environment:
       REDIS_URL: "redis://redis:6379/0"
-      QUEUE_NAME: "default"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
+      QUEUE_NAME: "vlm_queue"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    # Scale workers if needed: docker compose up --scale worker=3
 
   # 3. The Queue (Redis)
   redis:
-    image: "redis:alpine"
+    image: "redis:7-alpine"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    # For production, consider using redis.conf with proper security settings
+
+volumes:
+  redis_data:
+    driver: local
