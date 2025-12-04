@@ -137,7 +137,7 @@ def draw_bounding_boxes_opencv(image_path: str, detections: list, output_path: s
     
     # Save annotated image
     cv2.imwrite(output_path, img)
-    print(f"✓ Annotated image saved: {output_path}")
+    print(f"Annotated image saved: {output_path}")
 
 def draw_bounding_boxes_pil(image_path: str, detections: list, output_path: str):
     """Draw bounding boxes using PIL"""
@@ -194,7 +194,7 @@ def draw_bounding_boxes_pil(image_path: str, detections: list, output_path: str)
     
     # Save annotated image
     img.save(output_path)
-    print(f"✓ Annotated image saved: {output_path}")
+    print(f"Annotated image saved: {output_path}")
 
 def draw_bounding_boxes(image_path: str, detections: list, output_path: str):
     """Draw bounding boxes using available library"""
@@ -207,7 +207,7 @@ def save_json(data: dict, output_path: str):
     """Save JSON data to file"""
     with open(output_path, 'w') as f:
         json.dump(data, f, indent=2)
-    print(f"✓ JSON data saved: {output_path}")
+    print(f"JSON data saved: {output_path}")
 
 def main():
     if len(sys.argv) < 3:

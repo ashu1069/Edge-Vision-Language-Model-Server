@@ -2,7 +2,7 @@
 
 A production-ready, containerized **edge vision-language inference stack** built with FastAPI, Redis, and YOLOv8 for real-time object detection.
 
-## 🚀 Features
+## Features
 
 - **FastAPI REST API** - Clean, async API with automatic OpenAPI documentation
 - **YOLOv8 Object Detection** - State-of-the-art vision model for detecting objects in images
@@ -11,7 +11,7 @@ A production-ready, containerized **edge vision-language inference stack** built
 - **Annotation Tools** - Generate annotated images with bounding boxes and JSON outputs
 - **Production Ready** - Error handling, graceful shutdown, health checks, and monitoring
 
-## 📋 Table of Contents
+## Table of Contents
 
 - [Quick Start](#quick-start)
 - [Architecture](#architecture)
@@ -23,7 +23,7 @@ A production-ready, containerized **edge vision-language inference stack** built
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────┐     ┌──────────┐     ┌─────────┐
@@ -42,7 +42,7 @@ A production-ready, containerized **edge vision-language inference stack** built
 2. **Worker Service** - Background processor running YOLOv8 inference
 3. **Redis** - Job queue and result storage with persistence
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -79,7 +79,7 @@ curl -X POST http://localhost:8000/predict \
   | python3 -m json.tool
 ```
 
-## 📖 API Documentation
+## API Documentation
 
 ### Endpoints
 
@@ -146,7 +146,7 @@ Health check endpoint.
 
 Visit `http://localhost:8000/docs` for interactive Swagger UI documentation.
 
-## 💻 Usage Examples
+## Usage Examples
 
 ### Using the Helper Script
 
@@ -221,7 +221,7 @@ while True:
 # - test_result_TIMESTAMP.json (complete detection data)
 ```
 
-## 🧪 Testing
+## Testing
 
 ### Running Tests
 
@@ -249,7 +249,7 @@ tests/
 └── conftest.py          # Pytest fixtures
 ```
 
-## 🛠️ Development
+## Development
 
 ### Local Development Setup
 
@@ -301,7 +301,7 @@ This project uses [`uv`](https://github.com/astral-sh/uv) for fast, reliable dep
 - `opencv-python-headless` - Image processing
 - `pydantic` - Data validation
 
-## 🚢 Deployment
+## Deployment
 
 ### Production Considerations
 
@@ -333,9 +333,9 @@ This project uses [`uv`](https://github.com/astral-sh/uv) for fast, reliable dep
 
 See `INFRASTRUCTURE.md` for detailed deployment guide.
 
-## 📊 Current Status
+## Current Status
 
-### ✅ Implemented (Phase 1 & 2)
+### Implemented (Phase 1 & 2)
 
 - [x] FastAPI REST API with async endpoints
 - [x] Redis-based job queue system
@@ -346,7 +346,7 @@ See `INFRASTRUCTURE.md` for detailed deployment guide.
 - [x] Graceful shutdown and connection retry logic
 - [x] Comprehensive test suite
 
-### 🚧 Planned (Phase 3 & 4)
+### Planned (Phase 3 & 4)
 
 - [ ] Vision-Language Model (VLM) integration
   - [ ] vLLM server setup
@@ -357,7 +357,7 @@ See `INFRASTRUCTURE.md` for detailed deployment guide.
   - [ ] CUDA acceleration
   - [ ] Batch processing
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please:
 
@@ -374,17 +374,17 @@ Contributions are welcome! Please:
 - Update documentation as needed
 - Ensure all tests pass before submitting
 
-## 📝 License
+## License
 
 See [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Ultralytics](https://github.com/ultralytics/ultralytics) for YOLOv8
 - [FastAPI](https://fastapi.tiangolo.com/) for the web framework
 - [uv](https://github.com/astral-sh/uv) for blazing-fast package management
 
-## 📚 Additional Resources
+## Additional Resources
 
 - [API Documentation](http://localhost:8000/docs) - Interactive Swagger UI
 - [Infrastructure Guide](INFRASTRUCTURE.md) - Detailed deployment and scaling guide

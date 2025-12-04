@@ -59,7 +59,7 @@ if echo "$RESPONSE" | grep -q "detail"; then
 fi
 
 REQUEST_ID=$(echo "$RESPONSE" | python3 -c "import sys, json; print(json.load(sys.stdin)['request_id'])")
-echo "✓ Request submitted"
+echo "Request submitted"
 echo "Request ID: $REQUEST_ID"
 echo ""
 echo "Processing (this may take a few seconds)..."
