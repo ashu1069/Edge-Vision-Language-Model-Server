@@ -1,12 +1,20 @@
+"""
+FastAPI application for Edge VLM Inference Server.
+
+Provides REST API endpoints for image inference using YOLO and VLM models.
+"""
+
 import json
+import logging
 import os
 import uuid
-from typing import Optional
 
 import redis
 from fastapi import FastAPI, HTTPException
 
 from app.schemas import InferenceRequest, InferenceResponse
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Edge VLM Infra")
 
@@ -25,7 +33,7 @@ try:
         redis_host = "redis"
         redis_port = 6379
         redis_db = 0
-    
+
     redis_client = redis.Redis(
         host=redis_host,
         port=redis_port,
@@ -33,11 +41,11 @@ try:
         password=redis_password,
         decode_responses=False,
         socket_connect_timeout=5,
-        socket_timeout=5
+        socket_timeout=5,
     )
     redis_client.ping()
 except Exception as e:
-    print(f"Warning: Redis connection failed: {e}")
+    logger.warning(f"Redis connection failed: {e}")
     redis_client = None
 
 @app.post("/predict", response_model=InferenceResponse)

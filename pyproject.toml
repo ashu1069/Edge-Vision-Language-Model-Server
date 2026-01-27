@@ -1,8 +1,8 @@
 # pyproject.toml
 [project]
 name = "edge-vlm-server"
-version = "0.1.0"
-description = "High-performance Edge VLM Inference Server"
+version = "0.2.0"
+description = "High-performance Edge VLM Inference Server with Vision-Language Model support"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,10 +14,19 @@ dependencies = [
     "opencv-python-headless>=4.8.0",
     "numpy>=1.24.0",
     "requests>=2.30.0",
+    "pillow>=10.0.0",
 ]
 
-[tool.uv]
-dev-dependencies = [
+[project.optional-dependencies]
+vlm = [
+    "torch>=2.0.0",
+    "transformers>=4.40.0",
+    "accelerate>=0.25.0",
+    "qwen-vl-utils>=0.0.8",
+]
+
+[dependency-groups]
+dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "pytest-asyncio>=0.21.0",

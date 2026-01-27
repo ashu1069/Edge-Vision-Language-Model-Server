@@ -17,9 +17,9 @@ WORKDIR /app
 # 4. Copy ONLY the project definition first (Optimization for Caching)
 COPY pyproject.toml .
 
-# 5. Install dependencies using uv
+# 5. Install dependencies using uv (including VLM extras)
 # --system installs into the container's global python environment
-RUN uv pip install --system .
+RUN uv pip install --system ".[vlm]"
 
 # 6. Copy the rest of the code
 COPY . .
