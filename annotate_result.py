@@ -261,8 +261,7 @@ def main():
         "image_file": image_path,
         "detections": detections,
         "count": vision_result.get("count", 0),
-        "latency_seconds": vision_result.get("latency_seconds", 0),
-        "confidence_threshold": vision_result.get("confidence_threshold", 0.5)
+        "latency_seconds": result_data.get("latency_seconds", 0)
     }
     
     save_json(output_data, str(json_output_path))

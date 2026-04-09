@@ -16,6 +16,7 @@ from typing import Any, Optional
 
 import redis
 
+from app.redis_utils import parse_redis_url
 from app.router import TaskType, route_prompt
 from app.vision import VisionModel
 
@@ -40,28 +41,6 @@ vlm_engine: Optional[Any] = None  # Lazy import to avoid loading torch at startu
 shutdown_requested = False
 
 
-def parse_redis_url(url: str) -> tuple[str, int, int]:
-    """
-    Parse Redis URL into host, port, and db.
-    
-    Args:
-        url: Redis connection URL (e.g., 'redis://localhost:6379/0')
-        
-    Returns:
-        Tuple of (host, port, db)
-    """
-    if url.startswith("redis://"):
-        parts = url.replace("redis://", "").split("/")
-        host_port = parts[0].split(":")
-        redis_host = host_port[0] if len(host_port) > 0 else "redis"
-        redis_port = int(host_port[1]) if len(host_port) > 1 else 6379
-        redis_db = int(parts[1]) if len(parts) > 1 else 0
-    else:
-        redis_host = "redis"
-        redis_port = 6379
-        redis_db = 0
-    return redis_host, redis_port, redis_db
-
 
 def connect_to_redis() -> bool:
     """
@@ -72,16 +51,16 @@ def connect_to_redis() -> bool:
     """
     global redis_client
     
-    redis_host, redis_port, redis_db = parse_redis_url(redis_url)
+    host, port, db = parse_redis_url(redis_url)
     max_retries = 5
     retry_delay = 2
-    
+
     for attempt in range(max_retries):
         try:
             redis_client = redis.Redis(
-                host=redis_host,
-                port=redis_port,
-                db=redis_db,
+                host=host,
+                port=port,
+                db=db,
                 password=redis_password,
                 decode_responses=False,
                 socket_connect_timeout=5,
@@ -89,7 +68,7 @@ def connect_to_redis() -> bool:
                 retry_on_timeout=True
             )
             redis_client.ping()
-            logger.info(f"Connected to Redis at {redis_host}:{redis_port}")
+            logger.info(f"Connected to Redis at {host}:{port}")
             return True
         except redis.exceptions.ConnectionError as e:
             if attempt < max_retries - 1:
@@ -141,6 +120,17 @@ def get_vlm_engine():
     except Exception as e:
         logger.error(f"Failed to initialize VLM engine: {e}")
         return None
+
+
+def _cleanup_gpu_memory() -> None:
+    """Release unused GPU memory after each inference job."""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except ImportError:
+        pass
 
 
 def signal_handler(signum, frame):
@@ -261,9 +251,9 @@ def main():
             try:
                 # Process the job through router
                 result_data = process_job(job)
-                
+
                 latency = round(time.time() - start_time, 4)
-                
+
                 output = {
                     "status": "success",
                     "task_type": result_data["task_type"],
@@ -271,7 +261,7 @@ def main():
                     "vlm_result": result_data["vlm_result"],
                     "latency_seconds": latency,
                 }
-                
+
                 redis_client.setex(f"result:{job_id}", 3600, json.dumps(output))
                 logger.info(
                     f"Job {job_id} finished in {latency}s "
@@ -283,7 +273,10 @@ def main():
                 traceback.print_exc()
                 error_output = {"status": "failed", "error": str(e)}
                 redis_client.setex(f"result:{job_id}", 3600, json.dumps(error_output))
-        
+            finally:
+                # Free GPU memory after each job (critical on edge devices)
+                _cleanup_gpu_memory()
+
         except redis.exceptions.ConnectionError as e:
             logger.error(f"Redis connection lost in worker loop: {e}. Attempting to reconnect...")
             if not connect_to_redis():

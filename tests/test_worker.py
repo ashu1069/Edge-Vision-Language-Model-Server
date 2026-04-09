@@ -7,8 +7,9 @@ from unittest.mock import Mock, patch
 import pytest
 import redis
 
+from app.redis_utils import parse_redis_url
 from app.vision import VisionModel
-from app.worker import connect_to_redis, parse_redis_url, queue_name
+from app.worker import connect_to_redis, queue_name
 
 def test_parse_redis_url():
     """Test Redis URL parsing"""

@@ -1,10 +1,8 @@
-version: '3.8'
-
 services:
   # 1. The API Server
   api:
     build: .
-    command: ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "8000:8000"
     environment:
@@ -33,12 +31,24 @@ services:
   # 2. The Background Worker
   worker:
     build: .
-    # Run the worker directly with Python; avoid relying on uv scripts inside the container
     command: ["python", "-m", "app.worker"]
     environment:
       REDIS_URL: "redis://redis:6379/0"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
       QUEUE_NAME: "vlm_queue"
+      # --- YOLO settings ---
+      YOLO_MODEL: ${YOLO_MODEL:-yolov8n.pt}
+      YOLO_EXPORT_FORMAT: ${YOLO_EXPORT_FORMAT:-}
+      YOLO_HALF: ${YOLO_HALF:-false}
+      YOLO_IMGSZ: ${YOLO_IMGSZ:-640}
+      # --- VLM settings ---
+      VLM_ENABLED: ${VLM_ENABLED:-true}
+      VLM_MODEL: ${VLM_MODEL:-Qwen/Qwen2-VL-2B-Instruct}
+      LAZY_LOAD_VLM: ${LAZY_LOAD_VLM:-true}
+      MODEL_BACKEND: ${MODEL_BACKEND:-auto}
+      VLM_QUANTIZATION: ${VLM_QUANTIZATION:-none}
+      VLM_COMPILE: ${VLM_COMPILE:-false}
+      DEVICE: ${DEVICE:-auto}
     depends_on:
       redis:
         condition: service_healthy
@@ -74,7 +84,6 @@ services:
         reservations:
           cpus: '0.25'
           memory: 256M
-    # For production, consider using redis.conf with proper security settings
 
 volumes:
   redis_data:

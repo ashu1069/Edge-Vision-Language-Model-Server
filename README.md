@@ -1,166 +1,133 @@
-# Edge Vision Language Model Server
+# Edge Vision-Language Model Server
 
-A production-ready, containerized **edge vision-language inference stack** built with FastAPI, Redis, YOLOv8, and Qwen2-VL for real-time object detection and vision-language reasoning.
+A free, open-source inference server that combines **YOLOv8 object detection** with **vision-language model reasoning** for edge deployment. Runs on NVIDIA Jetson, desktop GPUs, Apple Silicon, or CPU.
+
+Point a camera at a scene, ask a question, and get both structured detections and natural-language understanding.
+
+```
+"Find all vehicles and describe their behavior"
+  → detections: [{class: "car", confidence: 0.92, box: [...]}, ...]
+  → vlm_result: "A sedan is stopped at the intersection while a cyclist passes..."
+```
+
+## Why This Exists
+
+Most vision-language APIs require cloud access, cost money, and add latency. This server is designed to run **entirely on-premise** on devices as small as a Jetson Nano — no cloud, no API keys, no data leaving your network. Use it for campus safety monitoring, ADAS prototyping, warehouse inspection, or agricultural field analysis.
 
 ## Features
 
-- **FastAPI REST API** - Clean, async API with automatic OpenAPI documentation
-- **YOLOv8 Object Detection** - State-of-the-art vision model for detecting objects in images
-- **Qwen2-VL Integration** - Vision-language model for image understanding and reasoning
-- **Smart Prompt Routing** - Automatically routes requests to YOLO, VLM, or both based on prompt analysis
-- **Redis Queue System** - Reliable job queue with result storage
-- **Docker Compose** - One-command deployment with health checks and resource limits
-- **Multi-Device Support** - Auto-detection of CUDA, MPS (Apple Silicon), and CPU
-- **Annotation Tools** - Generate annotated images with bounding boxes and JSON outputs
-- **Production Ready** - Error handling, graceful shutdown, health checks, and monitoring
-
-## Table of Contents
-
-- [Quick Start](#quick-start)
-- [Architecture](#architecture)
-- [API Documentation](#api-documentation)
-- [Prompt Routing](#prompt-routing)
-- [Usage Examples](#usage-examples)
-- [Development](#development)
-- [Testing](#testing)
-- [Deployment](#deployment)
-- [Configuration](#configuration)
-- [Contributing](#contributing)
-
-## Architecture
-
-```
-┌─────────┐     ┌──────────┐     ┌─────────┐
-│ Client  │────▶│   API    │────▶│  Redis  │
-└─────────┘     └──────────┘     └────┬────┘
-                                      │
-                                 ┌────▼────┐
-                                 │ Worker  │
-                                 └────┬────┘
-                                      │
-                         ┌────────────┼────────────┐
-                         │            │            │
-                    ┌────▼────┐  ┌────▼────┐  ┌────▼────┐
-                    │  YOLO   │  │   VLM   │  │  Both   │
-                    │  Only   │  │  Only   │  │ Models  │
-                    └─────────┘  └─────────┘  └─────────┘
-```
-
-### Components
-
-1. **API Service** - FastAPI application handling HTTP requests
-2. **Worker Service** - Background processor with prompt routing
-3. **Prompt Router** - Classifies prompts to determine which model(s) to use
-4. **YOLOv8** - Object detection model (fast, always loaded)
-5. **Qwen2-VL** - Vision-language model (lazy-loaded, optional)
-6. **Redis** - Job queue and result storage with persistence
+- **YOLOv8 Detection** with TensorRT / ONNX export for edge GPUs
+- **Any HuggingFace VLM** — Qwen2-VL, SmolVLM, LLaVA, PaliGemma, InternVL, etc.
+- **Smart Prompt Routing** — automatically picks YOLO, VLM, or both based on your question
+- **INT8 / INT4 Quantization** — run 2B-parameter VLMs in ~1.2 GB VRAM
+- **torch.compile()** — graph-level optimization for 10-30% speedup
+- **Async Redis Queue** — non-blocking API, reliable job processing
+- **Docker Compose** — one-command deployment with health checks
+- **Multi-Device** — auto-detects CUDA, MPS (Apple Silicon), CPU
 
 ## Quick Start
 
 ### Prerequisites
 
 - Docker and Docker Compose
-- Python 3.10+ (for local development/testing)
+- Python 3.10+ (for local development)
 
-### Running with Docker Compose
+### 1. Run with Docker Compose
 
 ```bash
-# Clone the repository
-git clone <repository-url>
+git clone https://github.com/your-username/Edge-Vision-Language-Model-Server.git
 cd Edge-Vision-Language-Model-Server
 
-# Start all services
+# Start all services (API + Worker + Redis)
 docker compose up --build
 
-# Services will be available at:
-# - API: http://localhost:8000
-# - API Docs: http://localhost:8000/docs
-# - Health Check: http://localhost:8000/health
+# API available at:
+#   http://localhost:8000       — endpoints
+#   http://localhost:8000/docs  — interactive Swagger UI
+#   http://localhost:8000/health — health check
 ```
 
-### Quick Test
+### 2. Send Your First Request
 
 ```bash
-# Detection task
-IMAGE_B64=$(base64 -i test.jpg | tr -d '\n')
-curl -X POST http://localhost:8000/predict \
-  -H "Content-Type: application/json" \
-  -d "{\"image_base64\": \"$IMAGE_B64\", \"prompt\": \"Find all people\", \"confidence_threshold\": 0.5}"
+# Encode an image
+IMAGE_B64=$(base64 -i test.jpg | tr -d '\n')       # macOS
+# IMAGE_B64=$(base64 -w0 test.jpg)                  # Linux
 
-# VLM reasoning task
-curl -X POST http://localhost:8000/predict \
+# Submit a detection request
+curl -s -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
-  -d "{\"image_base64\": \"$IMAGE_B64\", \"prompt\": \"Describe what is happening in this scene\"}"
+  -d "{\"image_base64\": \"$IMAGE_B64\", \"prompt\": \"Find all people\"}" \
+  | python3 -m json.tool
 
-# Combined task
-curl -X POST http://localhost:8000/predict \
-  -H "Content-Type: application/json" \
-  -d "{\"image_base64\": \"$IMAGE_B64\", \"prompt\": \"Find all vehicles and describe their behavior\"}"
+# → {"request_id": "abc-123-...", "status": "queued"}
+
+# Poll for results
+curl -s http://localhost:8000/result/abc-123-... | python3 -m json.tool
 ```
 
-## API Documentation
+### 3. Use the Helper Script
 
-### Endpoints
+```bash
+# Basic inference
+./inference.sh test.jpg
 
-#### `POST /predict`
+# Custom confidence + prompt
+./inference.sh test.jpg 0.5 "Describe this scene"
 
-Submit an image for inference. The prompt determines whether to use YOLO, VLM, or both.
+# Save annotated image with bounding boxes
+./inference.sh test.jpg 0.5 "Find all people" --annotate
+```
 
-**Request:**
+## Architecture
+
+```
+Client (image + prompt)
+    |
+    v
+FastAPI API  ──>  Redis Queue  ──>  Worker
+(async, non-blocking)               |
+                              PromptRouter
+                            /      |       \
+                        YOLO     VLM     Both
+                      (detect) (reason) (detect→reason)
+                            \      |       /
+                              Result ──> Redis ──> Client polls
+```
+
+| Component | Role |
+|-----------|------|
+| **API** ([app/main.py](app/main.py)) | Accepts requests, queues jobs, returns results |
+| **Worker** ([app/worker.py](app/worker.py)) | Processes jobs, runs models, stores results |
+| **Router** ([app/router.py](app/router.py)) | Classifies prompts → detection / VLM / both |
+| **VisionModel** ([app/vision.py](app/vision.py)) | YOLOv8 wrapper with TensorRT/ONNX support |
+| **VLMModel** ([app/vlm.py](app/vlm.py)) | Generic HuggingFace VLM with quantization |
+| **Redis** | Job queue + result storage (1hr TTL) |
+
+## API Reference
+
+### `POST /predict`
+
+Submit an image for inference.
+
 ```json
 {
-  "image_base64": "base64_encoded_image_string",
-  "prompt": "Find all people in this image",
+  "image_base64": "<base64-encoded image>",
+  "prompt": "Find all people and describe the scene",
   "confidence_threshold": 0.5
 }
 ```
 
-**Response:**
+Response:
+
 ```json
-{
-  "request_id": "uuid-string",
-  "status": "queued"
-}
+{ "request_id": "uuid", "status": "queued" }
 ```
 
-#### `GET /result/{request_id}`
+### `GET /result/{request_id}`
 
-Get inference results for a request.
+Poll for results.
 
-**Response (detection only):**
-```json
-{
-  "status": "completed",
-  "data": {
-    "status": "success",
-    "task_type": "detection",
-    "vision_result": {
-      "detections": [
-        {"class": "person", "confidence": 0.84, "box": [0.48, 0.63, 0.2, 0.3]}
-      ],
-      "count": 1
-    },
-    "vlm_result": null,
-    "latency_seconds": 0.38
-  }
-}
-```
-
-**Response (VLM only):**
-```json
-{
-  "status": "completed",
-  "data": {
-    "status": "success",
-    "task_type": "vlm",
-    "vision_result": null,
-    "vlm_result": "The image shows a busy street scene with pedestrians crossing...",
-    "latency_seconds": 2.45
-  }
-}
-```
-
-**Response (both models):**
 ```json
 {
   "status": "completed",
@@ -168,302 +135,227 @@ Get inference results for a request.
     "status": "success",
     "task_type": "both",
     "vision_result": {
-      "detections": [{"class": "car", "confidence": 0.92, "box": [0.3, 0.4, 0.2, 0.15]}],
+      "detections": [
+        { "class": "person", "confidence": 0.84, "box": [0.48, 0.63, 0.2, 0.3] }
+      ],
       "count": 1
     },
-    "vlm_result": "Based on the detected car, it appears to be a sedan traveling at moderate speed...",
+    "vlm_result": "A person is walking across the crosswalk...",
     "latency_seconds": 2.85
   }
 }
 ```
 
-#### `GET /health`
+### `GET /health`
 
-Health check endpoint.
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "redis": "healthy"
-}
-```
-
-### Interactive API Documentation
-
-Visit `http://localhost:8000/docs` for interactive Swagger UI documentation.
+Returns `{"status": "healthy", "redis": "healthy"}`.
 
 ## Prompt Routing
 
-The system automatically routes requests based on prompt keywords:
+The router automatically decides which model(s) to use:
 
-| Task Type | Keywords | Example Prompts |
-|-----------|----------|-----------------|
-| **Detection Only** | find, detect, count, locate, where is, how many | "Find all people", "Count the cars", "Where is the bicycle?" |
-| **VLM Only** | describe, explain, why, analyze, safe, risk, summarize | "Describe this scene", "Is this situation safe?", "Explain what is happening" |
-| **Both Models** | find and describe, detect and explain, what are they doing | "Find the vehicles and describe their behavior", "What are the people doing?" |
+| Task | Triggers | Example |
+|------|----------|---------|
+| **Detection only** | find, detect, count, locate, where is, how many | `"Count the cars"` |
+| **VLM only** | describe, explain, analyze, safe, risk, summarize | `"Is this scene safe?"` |
+| **Both** | find + describe, ambiguous prompts | `"Find vehicles and describe their behavior"` |
 
-When both detection and VLM keywords are present, or when the prompt is ambiguous, both models are used for comprehensive results.
+When uncertain, it defaults to running both models (conservative).
 
-## Usage Examples
+## Configuration
 
-### Using cURL
+All configuration is via environment variables. Set them in your shell, `.env` file, or `docker-compose.yml`.
 
-```bash
-# Detection task
-REQUEST_ID=$(curl -s -X POST http://localhost:8000/predict \
-  -H "Content-Type: application/json" \
-  -d "{\"image_base64\": \"$(base64 -i test.jpg | tr -d '\n')\", \"prompt\": \"Find people\"}" \
-  | python3 -c "import sys, json; print(json.load(sys.stdin)['request_id'])")
+### Core
 
-# Get results
-curl -s "http://localhost:8000/result/$REQUEST_ID" | python3 -m json.tool
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REDIS_URL` | `redis://redis:6379/0` | Redis connection URL |
+| `REDIS_PASSWORD` | `changeme` | Redis auth password (**change in production**) |
+| `QUEUE_NAME` | `vlm_queue` | Redis queue name |
+| `DEVICE` | `auto` | Force device: `auto`, `cuda`, `mps`, `cpu` |
 
-### Using Python
+### YOLO (Object Detection)
 
-```python
-import requests
-import base64
-import time
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `YOLO_MODEL` | `yolov8n.pt` | Model path — `.pt`, `.engine`, or `.onnx` |
+| `YOLO_EXPORT_FORMAT` | *(none)* | Auto-export on startup: `engine`, `onnx`, `torchscript`, `openvino` |
+| `YOLO_HALF` | `false` | FP16 inference (recommended for TensorRT) |
+| `YOLO_IMGSZ` | `640` | Input image size for export |
+| `YOLO_WARMUP` | `1` | Warmup inference runs after loading |
 
-# Encode image
-with open("test.jpg", "rb") as f:
-    image_b64 = base64.b64encode(f.read()).decode('utf-8')
+### VLM (Vision-Language Model)
 
-# Submit request (VLM reasoning)
-response = requests.post(
-    "http://localhost:8000/predict",
-    json={
-        "image_base64": image_b64,
-        "prompt": "Describe what is happening and identify any safety concerns",
-        "confidence_threshold": 0.5
-    }
-)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VLM_ENABLED` | `true` | Enable VLM (set `false` for detection-only mode) |
+| `VLM_MODEL` | `Qwen/Qwen2-VL-2B-Instruct` | Any HuggingFace VLM model ID |
+| `LAZY_LOAD_VLM` | `true` | Load VLM on first request (saves startup memory) |
+| `MODEL_BACKEND` | `auto` | Model loading: `auto`, `transformers`, `qwen` |
+| `VLM_QUANTIZATION` | `none` | Weight quantization: `none`, `int8`, `int4` |
+| `VLM_COMPILE` | `false` | Apply `torch.compile()` graph optimization |
 
-request_id = response.json()["request_id"]
+## Swapping Models
 
-# Poll for results
-while True:
-    result = requests.get(f"http://localhost:8000/result/{request_id}")
-    data = result.json()
-    if data["status"] == "completed":
-        print(f"Task type: {data['data']['task_type']}")
-        print(f"Detections: {data['data']['vision_result']}")
-        print(f"VLM Response: {data['data']['vlm_result']}")
-        break
-    time.sleep(1)
-```
-
-### Using the Helper Script
+The server works with **any HuggingFace VLM** that supports chat templates:
 
 ```bash
-# Basic inference
-./inference.sh test.jpg
+# Default (edge-optimized, 2B params, ~4GB VRAM)
+VLM_MODEL=Qwen/Qwen2-VL-2B-Instruct
 
-# With custom confidence threshold
-./inference.sh test.jpg 0.5
+# Lightweight alternative (Apache 2.0 license, ~4GB VRAM)
+VLM_MODEL=HuggingFaceTB/SmolVLM-Instruct
 
-# With custom prompt
-./inference.sh test.jpg 0.5 "Describe this scene"
+# Better reasoning (7B params, ~16GB VRAM)
+VLM_MODEL=Qwen/Qwen2.5-VL-7B-Instruct
 
-# With annotation (saves annotated image and JSON)
-./inference.sh test.jpg 0.5 "Find all people" --annotate
+# LLaVA
+VLM_MODEL=llava-hf/llava-v1.6-mistral-7b-hf
 ```
 
-## Testing
+The backend auto-detects Qwen models and uses their optimized loader. All others use the generic `AutoModelForVision2Seq` path.
 
-### Running Tests
+For YOLO, swap the model size based on your accuracy/speed needs:
 
 ```bash
-# Install test dependencies
-uv sync --dev
-
-# Run all tests
-uv run pytest
-
-# Run with coverage
-uv run pytest --cov=app --cov-report=html
-
-# Run specific test file
-uv run pytest tests/test_router.py
+YOLO_MODEL=yolov8n.pt   # Nano  — fastest, lowest accuracy
+YOLO_MODEL=yolov8s.pt   # Small — good balance
+YOLO_MODEL=yolov8m.pt   # Medium
+YOLO_MODEL=yolov8l.pt   # Large — highest accuracy, slowest
 ```
 
-### Test Structure
+## Edge Deployment (NVIDIA Jetson)
 
+For Jetson Orin / Nano, use TensorRT + quantization for production performance:
+
+```bash
+# .env file for Jetson deployment
+DEVICE=cuda
+YOLO_MODEL=yolov8n.pt
+YOLO_EXPORT_FORMAT=engine    # Auto-exports to TensorRT on first startup
+YOLO_HALF=true               # FP16 for TensorRT
+VLM_MODEL=Qwen/Qwen2-VL-2B-Instruct
+VLM_QUANTIZATION=int4        # 4x memory reduction
+VLM_COMPILE=true             # Graph optimization
 ```
-tests/
-├── test_api.py          # API endpoint tests
-├── test_vision.py       # Vision model tests
-├── test_vlm.py          # VLM model tests
-├── test_router.py       # Prompt router tests
-├── test_worker.py       # Worker integration tests
-└── conftest.py          # Pytest fixtures
-```
+
+First startup exports the TensorRT engine (~2 min). Subsequent starts load the cached `.engine` file instantly.
+
+**Expected performance on Jetson Orin (8GB):**
+
+| Component | PyTorch FP32 | With Optimizations |
+|-----------|-------------|-------------------|
+| YOLOv8n | ~30ms | ~5-8ms (TensorRT FP16) |
+| Qwen2-VL-2B | ~3-5s, 4GB VRAM | ~1.5-2.5s, ~1.2GB VRAM (INT4) |
 
 ## Development
 
-### Local Development Setup
+### Local Setup
 
 ```bash
-# Install dependencies using uv
-uv sync
-
-# Install dev dependencies
+# Install dependencies
 uv sync --dev
 
-# Install VLM dependencies (optional, requires more memory)
-uv sync --extra vlm
+# Install VLM dependencies (optional, needs more memory)
+uv sync --dev --extra vlm
 
-# Run API locally (requires Redis)
+# Install quantization support (optional, CUDA only)
+uv sync --dev --extra quantization
+
+# Start Redis locally
+docker run -d -p 6379:6379 redis:7-alpine
+
+# Terminal 1: API server
 export REDIS_URL="redis://localhost:6379/0"
-export QUEUE_NAME="vlm_queue"
 uv run uvicorn app.main:app --reload
 
-# Run worker locally (in another terminal)
+# Terminal 2: Worker
 export REDIS_URL="redis://localhost:6379/0"
-export VLM_ENABLED=true  # Enable VLM support
 uv run python -m app.worker
 ```
 
 ### Project Structure
 
 ```
-.
-├── app/
-│   ├── main.py          # FastAPI application
-│   ├── schemas.py       # Pydantic models
-│   ├── vision.py        # YOLOv8 vision model
-│   ├── vlm.py           # Qwen2-VL vision-language model
-│   ├── router.py        # Prompt-based task routing
-│   ├── device.py        # Device detection utilities
-│   └── worker.py        # Background worker
-├── tests/               # Test suite
-├── results/             # Annotated outputs (gitignored)
-├── docker-compose.yml   # Docker Compose configuration
-├── Dockerfile           # Container image definition
-├── pyproject.toml       # Project dependencies (uv)
-├── inference.sh         # Helper script for inference
-└── annotate_result.py   # Annotation tool
+app/
+  main.py          — FastAPI application (async Redis)
+  worker.py        — Background job processor
+  router.py        — Prompt-based task routing
+  vision.py        — YOLOv8 + TensorRT/ONNX wrapper
+  vlm.py           — Generic HuggingFace VLM wrapper
+  device.py        — Device detection (CUDA/MPS/CPU)
+  schemas.py       — Pydantic request/response models
+  redis_utils.py   — Shared Redis URL parsing
+tests/             — pytest test suite
+docker-compose.yml — Full-stack orchestration
+Dockerfile         — Container image
+inference.sh       — CLI helper for testing
+annotate_result.py — Draw bounding boxes on results
 ```
 
-### Dependencies
+### Running Tests
 
-This project uses [`uv`](https://github.com/astral-sh/uv) for fast, reliable dependency management. All dependencies are defined in `pyproject.toml`.
+```bash
+uv run pytest                              # All tests
+uv run pytest --cov=app --cov-report=html  # With coverage report
+uv run pytest tests/test_router.py         # Single file
+```
 
-**Core Dependencies:**
-- `fastapi` - Web framework
-- `uvicorn` - ASGI server
-- `redis` - Queue and result storage
-- `ultralytics` - YOLOv8 models
-- `opencv-python-headless` - Image processing
-- `pydantic` - Data validation
+### Using Python
 
-**VLM Dependencies (optional):**
-- `torch` - PyTorch for model inference
-- `transformers` - HuggingFace model loading
-- `accelerate` - Model optimization
-- `qwen-vl-utils` - Qwen2-VL utilities
+```python
+import requests, base64, time
 
-## Configuration
+with open("test.jpg", "rb") as f:
+    image_b64 = base64.b64encode(f.read()).decode()
 
-### Environment Variables
+# Submit
+resp = requests.post("http://localhost:8000/predict", json={
+    "image_base64": image_b64,
+    "prompt": "Find all people and describe the scene",
+    "confidence_threshold": 0.5,
+})
+request_id = resp.json()["request_id"]
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REDIS_URL` | `redis://redis:6379/0` | Redis connection URL |
-| `REDIS_PASSWORD` | `changeme` | Redis auth password |
-| `QUEUE_NAME` | `vlm_queue` | Redis list name for job queue |
-| `VLM_ENABLED` | `true` | Enable/disable VLM (fallback to YOLO-only) |
-| `VLM_MODEL` | `Qwen/Qwen2-VL-2B-Instruct` | HuggingFace model ID |
-| `LAZY_LOAD_VLM` | `true` | Load VLM on first use vs startup |
-| `DEVICE` | `auto` | Force device (auto/cuda/mps/cpu) |
+# Poll
+while True:
+    result = requests.get(f"http://localhost:8000/result/{request_id}").json()
+    if result["status"] == "completed":
+        print(result["data"]["vlm_result"])
+        break
+    time.sleep(1)
+```
 
-### Resource Requirements
+## Scaling
+
+```bash
+# Run 3 workers in parallel
+docker compose up --scale worker=3
+
+# Workers are stateless — each picks jobs from the shared Redis queue
+```
+
+## Resource Requirements
 
 | Component | CPU | Memory | Notes |
 |-----------|-----|--------|-------|
-| API | 2 cores | 2GB | Handles HTTP requests |
-| Worker (YOLO only) | 4 cores | 4GB | Object detection |
-| Worker (with VLM) | 4 cores | 8GB+ | VLM needs ~4-6GB for Qwen2-VL-2B |
-| Redis | 1 core | 1GB | Job queue and results |
-
-## Deployment
-
-### Production Considerations
-
-1. **Environment Variables**
-   ```bash
-   REDIS_URL=redis://redis:6379/0
-   REDIS_PASSWORD=your-secure-password
-   VLM_ENABLED=true
-   VLM_MODEL=Qwen/Qwen2-VL-2B-Instruct
-   ```
-
-2. **Resource Limits** - Already configured in `docker-compose.yml`
-
-3. **Security**
-   - Change default Redis password
-   - Use environment variables for secrets
-   - Enable HTTPS/TLS
-   - Add API authentication
-
-4. **Scaling**
-   ```bash
-   # Scale workers
-   docker compose up --scale worker=3
-   ```
-
-5. **Monitoring**
-   - Health checks: `GET /health`
-   - Logs: `docker compose logs -f`
-   - Metrics: Consider adding Prometheus endpoints
-
-## Current Status
-
-### Implemented (Phase 1, 2 & 3)
-
-- [x] FastAPI REST API with async endpoints
-- [x] Redis-based job queue system
-- [x] YOLOv8 object detection worker
-- [x] Health checks and error handling
-- [x] Docker Compose setup with resource limits
-- [x] Annotation tools for visual results
-- [x] Graceful shutdown and connection retry logic
-- [x] Comprehensive test suite
-- [x] Vision-Language Model (VLM) integration
-- [x] Qwen2-VL support via HuggingFace Transformers
-- [x] Smart prompt-based routing
-- [x] Multi-device support (CUDA/MPS/CPU)
-
-### Planned (Phase 4)
-
-- [ ] Performance optimization
-  - [ ] C++ post-processor
-  - [ ] Batch processing
-- [ ] Streaming responses for VLM
-- [ ] API authentication
+| API | 2 cores | 2 GB | HTTP handling only |
+| Worker (YOLO only) | 4 cores | 4 GB | Detection tasks |
+| Worker (YOLO + VLM) | 4 cores | 8 GB+ | VLM needs ~4 GB (FP32) or ~1.2 GB (INT4) |
+| Redis | 1 core | 1 GB | Queue + result storage |
 
 ## Contributing
 
-Contributions are welcome! Please:
-
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
+3. Add tests for new features
+4. Ensure all tests pass (`uv run pytest`)
 5. Open a Pull Request
-
-### Development Guidelines
-
-- Follow PEP 8 style guide
-- Add tests for new features
-- Update documentation as needed
-- Ensure all tests pass before submitting
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
+Apache 2.0 — see [LICENSE](LICENSE).
 
 ## Acknowledgments
 
@@ -472,13 +364,3 @@ See [LICENSE](LICENSE) file for details.
 - [FastAPI](https://fastapi.tiangolo.com/) for the web framework
 - [HuggingFace](https://huggingface.co/) for Transformers
 - [uv](https://github.com/astral-sh/uv) for blazing-fast package management
-
-## Additional Resources
-
-- [API Documentation](http://localhost:8000/docs) - Interactive Swagger UI
-- [Infrastructure Guide](INFRASTRUCTURE.md) - Detailed deployment and scaling guide
-- [Annotation Guide](ANNOTATION_GUIDE.md) - Creating annotated outputs
-
----
-
-**Status**: Production-ready for Phase 1, 2 & 3. Phase 4 performance optimizations are planned for future releases.

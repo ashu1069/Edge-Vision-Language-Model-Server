@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from app.vlm import VLMModel
+from app.vlm import ModelBackend, QuantizationMode, VLMModel, _detect_backend
 from app.device import get_device
 
 
@@ -68,6 +68,25 @@ class TestGetDevice:
             assert device in ["cuda", "mps", "cpu"]
 
 
+class TestBackendDetection:
+    """Tests for automatic model backend detection."""
+
+    def test_qwen_model_detected_as_qwen(self):
+        assert _detect_backend("Qwen/Qwen2-VL-2B-Instruct") == ModelBackend.QWEN
+
+    def test_qwen_case_insensitive(self):
+        assert _detect_backend("qwen/qwen2-vl-7b-instruct") == ModelBackend.QWEN
+
+    def test_non_qwen_model_uses_transformers(self):
+        assert _detect_backend("HuggingFaceTB/SmolVLM-Instruct") == ModelBackend.TRANSFORMERS
+
+    def test_llava_uses_transformers(self):
+        assert _detect_backend("llava-hf/llava-v1.6-mistral-7b-hf") == ModelBackend.TRANSFORMERS
+
+    def test_paligemma_uses_transformers(self):
+        assert _detect_backend("google/paligemma-3b-mix-224") == ModelBackend.TRANSFORMERS
+
+
 class TestVLMModelInitialization:
     """Tests for VLMModel initialization."""
     
@@ -112,6 +131,68 @@ class TestVLMModelInitialization:
         assert vlm.model is None
         assert vlm.processor is None
         assert vlm._loaded is False
+
+    def test_init_auto_backend_qwen(self):
+        """Test auto backend detection picks Qwen for Qwen models."""
+        vlm = VLMModel(model_name="Qwen/Qwen2-VL-2B-Instruct", lazy_load=True)
+        assert vlm.backend == ModelBackend.QWEN
+
+    def test_init_auto_backend_generic(self):
+        """Test auto backend detection picks transformers for non-Qwen."""
+        vlm = VLMModel(model_name="HuggingFaceTB/SmolVLM-Instruct", lazy_load=True)
+        assert vlm.backend == ModelBackend.TRANSFORMERS
+
+    def test_init_explicit_backend(self):
+        """Test explicit backend override."""
+        vlm = VLMModel(
+            model_name="Qwen/Qwen2-VL-2B-Instruct",
+            backend="transformers",
+            lazy_load=True,
+        )
+        assert vlm.backend == ModelBackend.TRANSFORMERS
+
+    def test_init_backend_from_env(self):
+        """Test backend read from MODEL_BACKEND env var."""
+        with patch.dict(os.environ, {"MODEL_BACKEND": "qwen"}):
+            vlm = VLMModel(model_name="some/model", lazy_load=True)
+            assert vlm.backend == ModelBackend.QWEN
+
+    def test_init_quantization_default_none(self):
+        """Test default quantization is none."""
+        vlm = VLMModel(lazy_load=True)
+        assert vlm.quantization == QuantizationMode.NONE
+
+    def test_init_quantization_int8(self):
+        """Test INT8 quantization from constructor."""
+        vlm = VLMModel(lazy_load=True, quantization="int8")
+        assert vlm.quantization == QuantizationMode.INT8
+
+    def test_init_quantization_int4(self):
+        """Test INT4 quantization from constructor."""
+        vlm = VLMModel(lazy_load=True, quantization="int4")
+        assert vlm.quantization == QuantizationMode.INT4
+
+    def test_init_quantization_from_env(self):
+        """Test quantization read from VLM_QUANTIZATION env var."""
+        with patch.dict(os.environ, {"VLM_QUANTIZATION": "int4"}):
+            vlm = VLMModel(lazy_load=True)
+            assert vlm.quantization == QuantizationMode.INT4
+
+    def test_init_compile_default_false(self):
+        """Test default compile is False."""
+        vlm = VLMModel(lazy_load=True)
+        assert vlm.compile_model is False
+
+    def test_init_compile_from_env(self):
+        """Test compile flag from VLM_COMPILE env var."""
+        with patch.dict(os.environ, {"VLM_COMPILE": "true"}):
+            vlm = VLMModel(lazy_load=True)
+            assert vlm.compile_model is True
+
+    def test_init_compile_explicit(self):
+        """Test explicit compile_model parameter."""
+        vlm = VLMModel(lazy_load=True, compile_model=True)
+        assert vlm.compile_model is True
 
 
 class TestVLMModelDecodeImage:
@@ -211,6 +292,24 @@ class TestVLMModelBuildPrompt:
         result = vlm._build_prompt(user_prompt, context)
         
         assert user_prompt in result
+
+
+class TestVLMQuantizationConfig:
+    """Tests for quantization config building."""
+
+    def test_quantization_none_returns_none(self):
+        """No quantization → no config."""
+        vlm = VLMModel(lazy_load=True, quantization="none")
+        assert vlm._build_quantization_config() is None
+
+    def test_quantization_non_cuda_returns_none(self):
+        """Quantization on CPU should gracefully return None."""
+        vlm = VLMModel(lazy_load=True, device="cpu", quantization="int8")
+        assert vlm._build_quantization_config() is None
+
+    def test_cleanup_gpu_memory_no_error_on_cpu(self):
+        """cleanup_gpu_memory should not raise on CPU."""
+        VLMModel.cleanup_gpu_memory()  # Should be a no-op
 
 
 class TestVLMModelInfo:
