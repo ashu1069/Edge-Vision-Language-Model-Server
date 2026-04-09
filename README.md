@@ -249,6 +249,26 @@ First startup exports the TensorRT engine (~2 min). Subsequent starts load the c
 | YOLOv8n | ~30ms | ~5-8ms (TensorRT FP16) |
 | Qwen2-VL-2B | ~3-5s, 4GB VRAM | ~1.5-2.5s, ~1.2GB VRAM (INT4) |
 
+## Benchmarks
+
+Measured on Apple M3 Pro (18 GB). See [BENCHMARKS.md](BENCHMARKS.md) for full results.
+
+| Component | Model | Median Latency | Device |
+|-----------|-------|---------------|--------|
+| **YOLO Detection** | yolov8n.pt | **27.5 ms** | MPS (Apple Silicon) |
+| **VLM Inference** | Qwen2-VL-2B | ~38.5 s | MPS (FP32, unoptimized) |
+
+> MPS is not optimized for autoregressive decoding. On CUDA with TensorRT + INT4
+> quantization, expect **~5 ms** for YOLO and **~2 s** for VLM on Jetson Orin.
+
+Run benchmarks on your own hardware:
+
+```bash
+uv run python benchmark.py --yolo --yolo-runs 50    # YOLO only
+uv run python benchmark.py --vlm --vlm-runs 5       # VLM only
+uv run python benchmark.py --all                     # Everything
+```
+
 ## Development
 
 ### Local Setup

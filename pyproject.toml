@@ -4,6 +4,7 @@ name = "edge-vlm-server"
 version = "0.3.0"
 description = "High-performance Edge VLM Inference Server with Vision-Language Model support"
 readme = "README.md"
+license = {text = "Apache-2.0"}
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.100.0",
